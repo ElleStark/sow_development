@@ -51,7 +51,7 @@ dist_over_hist <- function(data){
 #### Obtain data: projected Mead and Powell 2026 EOCY elevations (Assume simulation starts in Dec 2026)
 # Per 2007 Interim Guidelines, Aug 24-month study for Jan 1 elevations determines operational tier. (Powell adjusted in April using EOWY projections)
 # Below data generated for Apr 2023 Draft SEIS - results from 100% esp (data from reducing hydrology to 90% and 80% also available)
-data <- read.csv('data_ignore/dec26_eocy_esp100.csv')
+data <- read.csv('data/ignore/dec26_eocy_esp100.csv')
 
 p_data <- dplyr::select(data, 1:4) %>%
   rename('Alt 1' = 'p_alt1', 'Alt 2' = 'p_alt2', 'No Action' = 'p_no_action', 'Apr23_CRMMS' = 'p_crmms')
@@ -216,18 +216,19 @@ par(mfrow = c(1, 1))
 scatterplot3d(v[,1],v[,2], pdf_mvd, color="red", main="Density", xlab = "Mead (ft)", ylab="Powell (ft)", zlab="pMvdc",pch=".")
 scatterplot3d(v[,1],v[,2], cdf_mvd, color="red", main="CDF", xlab = "Mead (ft)", ylab="Powell (ft)", zlab="pMvdc",pch=".")
 
-m_low <- 900
-m_high <- 1150
-p_low <- 3400
-p_high <- 3750
+### Visualizing the copula
 
-# Visualizing the copula
-persp(joint_dist, dMvdc, xlim = c(m_low, m_high), ylim=c(p_low, p_high), zlim=c(0, .0002),
-      main = "Density", xlab = 'Mead Elevation (ft)', ylab = 'Powell Elevation (ft)', 
-      zlab = 'PDF', theta = 35)
-contour(joint_dist, dMvdc, xlim = c(m_low, m_high), ylim=c(p_low, p_high), main = "Contour plot")
-persp(joint_dist, pMvdc, xlim = c(m_low, m_high), ylim=c(p_low, p_high), main = "CDF")
-contour(joint_dist, pMvdc, xlim = c(m_low, m_high), ylim=c(p_low, p_high), main = "Contour plot")
+# m_low <- 900
+# m_high <- 1150
+# p_low <- 3400
+# p_high <- 3750
+
+# persp(joint_dist, dMvdc, xlim = c(m_low, m_high), ylim=c(p_low, p_high), zlim=c(0, .0002),
+#       main = "Density", xlab = 'Mead Elevation (ft)', ylab = 'Powell Elevation (ft)', 
+#       zlab = 'PDF', theta = 35)
+# contour(joint_dist, dMvdc, xlim = c(m_low, m_high), ylim=c(p_low, p_high), main = "Contour plot")
+# persp(joint_dist, pMvdc, xlim = c(m_low, m_high), ylim=c(p_low, p_high), main = "CDF")
+# contour(joint_dist, pMvdc, xlim = c(m_low, m_high), ylim=c(p_low, p_high), main = "Contour plot")
 
 
 # Check random seed effect:
@@ -257,6 +258,15 @@ set.seed(14)
 initial_conditions <- as.data.frame(rMvdc(1000, joint_dist)) %>%
   rename('mead' = 'V1', 'powell' = 'V2')
 
+# Distribution may generate pool elevations above full pool or below dead pool. 
+# Check for those cases and set reservoir to max/min in those instances. 
+
+initial_conditions <- initial_conditions %>% 
+  mutate(across(powell, ~ ifelse(. > 3700, 3700, .))) %>%
+  mutate(across(powell, ~ ifelse(. < 3370, 3370, .))) %>%
+  mutate(across(mead, ~ ifelse(. > 1229, 1229, .))) %>%
+  mutate(across(mead, ~ ifelse(. < 895, 895, .)))
+
 saveRDS(initial_conditions, file = 'data/outputs/init_cond_1000.rds')
 
 ### Check final sampling with scatterplot
@@ -265,8 +275,8 @@ plot_compare <- ggplot() +
   geom_point(data = long, mapping = aes(x=mead_pe, y=powell_pe), color='blue') +
   xlab('Mead Elevation (ft)') +
   ylab('Powell Elevation (ft)') +
-  ylim(3450, 3735) +
-  xlim(900, 1135) +
+  #ylim(3450, 3735) +
+  #xlim(900, 1135) +
   theme_bw()
 
 plot_compare

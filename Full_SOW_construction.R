@@ -66,9 +66,30 @@ n = 1000
 min_demand = 4.2
 max_demand = 6.0
 
-set.seed(26)
+
+# Check random seed for sampling demand
+for(i in 1:30){
+  set.seed(i)
+  
+  demand_df <- data.frame(matrix(NA, nrow = n, ncol = 0)) %>%
+    mutate(demand = runif(n = n, min = min_demand, max = max_demand))
+  
+  nbins <- ceiling(sqrt(nrow(demand_df)))
+  demand_hist <- ggplot(demand_df, aes(x=demand)) +
+    geom_histogram(aes(y=after_stat(density)), position="identity", 
+                   binwidth = ((max(demand_df$demand)-min(demand_df$demand)))/nbins) +
+    geom_density()
+  
+  ggsave(filename = paste0('d_unif_', i, '.png'), demand_hist, width=4, height=4)
+}
+# Random seed 4 looks like good distribution for 1000 samples
+
+
+set.seed(4)
 demand_df <- data.frame(matrix(NA, nrow = n, ncol = 0)) %>%
   mutate(demand = runif(n = n, min = min_demand, max = max_demand))
+
+
 
 # Check demand distribution w/ histogram & density plot
 nbins <- ceiling(sqrt(nrow(demand_df)))
@@ -77,9 +98,28 @@ demand_hist <- ggplot(demand_df, aes(x=demand)) +
                  binwidth = ((max(demand_df$demand)-min(demand_df$demand)))/nbins) +
   geom_density()
 
+# Try using cLHS to sample spread of initial conditions & demand
+full_factorial_scd <- uncount(initial_conditions, nrow(demand_df))
+full_factorial_scd <- full_factorial_scd %>%
+  mutate(demand = rep(demand_df$demand, nrow(initial_conditions)))
+
+full_factorial_scd_norm <- full_factorial_scd %>%
+  mutate(across(everything(), normalize_col))
+
+nscd <- 1000
+iter = 10000
+set.seed(26)
+
+scd_samples <- clhs(full_factorial_scd_norm, size=nscd, iter=iter, 
+     simple = F, weights = list(numeric=1, factor=1, correlation=1))
+
+scd_df <- full_factorial_scd[scd_samples$index_samples,]
+
+
 # Merge initial conditions & demand into a single 'SCD' dataframe
-scd_df <- initial_conditions %>%
-  mutate(demand = demand_df$demand) 
+# This version randomly pairs demands with the initial conditions
+#scd_df <- initial_conditions %>%
+#  mutate(demand = demand_df$demand) 
 
 # Plot SCD df
 scd_plot <- ggplot(scd_df, mapping = aes(x=powell, y=demand)) +
