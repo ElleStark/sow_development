@@ -1,5 +1,6 @@
 # Potentially sensitive and/or large data files
 data/ignore/
+data/temp/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
