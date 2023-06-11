@@ -10,6 +10,7 @@ library(fitdistrplus)
 library(scatterplot3d)
 library(shiny)
 library(CRSSIO)
+library(DiceDesign)
 
 dist_over_hist <- function(data){
   # Input: vector of data that you want to fit 
@@ -280,3 +281,17 @@ plot_compare <- ggplot() +
   theme_bw()
 
 plot_compare
+
+
+# LHS approach to SCD matrix
+
+# initial LHS design: 1000 samples. 
+# initial conditions treated as 1D, since we have a CDF for the joint distribution of Mead and Powell
+lhs_design <- lhsDesign(1000, 2, seed = 4)$design
+# optimized LHS design using maximin criteria
+maxmin_lhs <- maximinSA_LHS(lhs_design)
+
+# pull initial conditions samples according to optimized LHS design 
+ic_probs <- maxmin_lhs$design[,1]
+
+
