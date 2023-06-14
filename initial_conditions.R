@@ -11,6 +11,7 @@ library(scatterplot3d)
 library(shiny)
 library(CRSSIO)
 library(DiceDesign)
+library(GGally)
 
 dist_over_hist <- function(data){
   # Input: vector of data that you want to fit 
@@ -154,7 +155,7 @@ p_combo_hist <- ggplot(p_long, aes(x=powell_pe)) +
 ###### DEVELOP MULTIVARIATE DISTRIBUTION BASED ON COPULA AND PARAMETRIC MARGINS
 # Reference: https://www.r-bloggers.com/2016/03/how-to-fit-a-copula-model-in-r-heavily-revised-part-2-fitting-the-copula/
 
-#### IF CONFIDENT IN PROJECTIONS, Fit parametric distributions to each margin
+#### Fit parametric distributions to each margin
 
 dist_over_hist(long$mead_pe) # for Apr 2023 data, best fit is weibull 
 m_dist_type <- 'weibull'
@@ -168,32 +169,23 @@ m_params <- list(shape=mead_dist$estimate[1], scale=mead_dist$estimate[2]) # may
 powell_dist <- fitdist(long$powell_pe, distr = p_dist_type, method = "mge", gof = "KS")
 p_params <- list(meanlog=powell_dist$estimate[1], sdlog=powell_dist$estimate[2]) # may need to change parameter names depending on distribution
 
-#### IF NOT CONFIDENT IN PROJECTIONS, use uniform distributions for Mead & Powell 
-m_dist_type = 'unif'
-p_dist_type = 'unif'
-# We chose to define min and max as the 10th and 90th percentiles of all runs
-min_percent = 0
-max_percent = 1
-m_params = list(min=quantile(long$mead_pe, min_percent), max=quantile(long$mead_pe, max_percent))
-p_params = list(min=quantile(long$powell_pe, min_percent), max=quantile(long$powell_pe, max_percent))
-
 ### Select best fit copula and determine parameters
 
-# Fit using empirical data
+## Fit using empirical data
 # Create 'psuedo-obsevations' between 0 and 1 for each reservoir:
 mead_pobs <- pobs(long[,2:3])[,1]
 powell_pobs <- pobs(long[,2:3])[,2]
 pobs_mat <- as.matrix(cbind(mead_pobs, powell_pobs))
 
-# Check without 2023 CRMMS data
-long_filt <- filter(long, Alternative != 'Apr23_CRMMS')
-mead_pobs <- pobs(long_filt[,2:3])[,1]
-powell_pobs <- pobs(long_filt[,2:3])[,2]
-pobs_mat <- as.matrix(cbind(mead_pobs, powell_pobs))
+## Check without 2023 CRMMS data
+# long_filt <- filter(long, Alternative != 'Apr23_CRMMS')
+# mead_pobs <- pobs(long_filt[,2:3])[,1]
+# powell_pobs <- pobs(long_filt[,2:3])[,2]
+# pobs_mat <- as.matrix(cbind(mead_pobs, powell_pobs))
 
 # You can run Shiny app to explore and compare different copulas - Vinecopula package
 # Can also select copula here, especially if you don't want the top fit determined by BiCopSelect
-selected_cop <- BiCopCompare(mead_pobs, powell_pobs, familyset = NA, rotations = TRUE)
+# selected_cop <- BiCopCompare(mead_pobs, powell_pobs, familyset = NA, rotations = TRUE)
 
 # Select Cop model
 selected_cop <- BiCopSelect(mead_pobs, powell_pobs,familyset=NA)
@@ -232,7 +224,7 @@ scatterplot3d(v[,1],v[,2], cdf_mvd, color="red", main="CDF", xlab = "Mead (ft)",
 # contour(joint_dist, pMvdc, xlim = c(m_low, m_high), ylim=c(p_low, p_high), main = "Contour plot")
 
 
-# Check random seed effect:
+### Check random seed effect for random sampling:
 for (i in 1:30){
   set.seed(i)
   initial_conditions <- NA
@@ -283,7 +275,78 @@ plot_compare <- ggplot() +
 plot_compare
 
 
-# LHS approach to SCD matrix
+#### LHSD approach to System Conditions and Demand (SCD) matrix
+
+# See Packham & Schmidt 2008: https://ssrn.com/abstract=1269633
+# Function to transform random samples to LHSD samples:
+get_lhsd_samp <- function(random_samples){
+  n <- nrow(random_samples)
+  rank_matrix <- apply(random_samples, 2, rank)
+  # eta determines where to sample within each strata. 0.5 samples from center.
+  eta = matrix(runif(n*ncol(random_samples), min=0, max=1), nrow=n)
+  lhsd_samp <- (rank_matrix - 1)/n + eta/n
+  
+  return(lhsd_samp)
+}
+
+# Get initial conditions previously generated from copula analysis
+initial_conditions <- readRDS('data/outputs/init_cond_1000.rds')
+
+# Generate demand from uniform dist. Demand min/max per 2020 Robustness runs.
+n <-1000
+min_demand <- 4.2
+max_demand <- 6.0 
+set.seed(4)
+
+demand <-  runif(n = n, min = min_demand, max = max_demand)
+
+scd_df <- initial_conditions
+scd_df$demand <- demand
+scd_df$method <- 'Random'
+
+# Plot of original randomly sampled SCD points
+orig_pairwise <- ggpairs(scd_df)
+
+# Generate LHSD design (probability of each dimension for each point)
+scd_lhsd_probs <- get_lhsd_samp(scd_df)
+
+# Map back onto marginal distributions to get values for each dimension
+# NEED TO MANUALLY CHANGE BELOW CODE TO MATCH DISTRIBUTIONS FITTED TO MARGINS
+mead_samps <- qweibull(scd_lhsd_probs[,1], shape = 41.9, scale = 1074)
+powell_samps <- qlnorm(scd_lhsd_probs[,2], meanlog = 8.19, sdlog = 0.0123)
+demand_samps <- qunif(scd_lhsd_probs[,3], min = 4.2, max = 6.0)
+scd_lhsd <- data.frame('mead' = mead_samps, 'powell' = powell_samps, 
+                       'demand' = demand_samps, 'method' = 'LHSD')
+
+scd_lhsd <- scd_lhsd %>% 
+  mutate(across(powell, ~ ifelse(. > 3700, 3700, .))) %>%
+  mutate(across(powell, ~ ifelse(. < 3370, 3370, .))) %>%
+  mutate(across(mead, ~ ifelse(. > 1229, 1229, .))) %>%
+  mutate(across(mead, ~ ifelse(. < 895, 895, .)))
+
+lhsd_pairwise <- ggpairs(as.data.frame(scd_lhsd), columns = c('mead', 'powell', 'demand'))
+
+### Compare random sampling to LHSD - pairwise plots
+scd_long <- scd_lhsd %>%
+  pivot_longer(cols=everything(), names_to='Uncertainty', values_to='Value') %>%
+  mutate(Method='LHSD')
+
+scd_longer <- rbind(scd_df_long, scd_df_long)
+
+scd_combined <- rbind(scd_df, scd_lhsd)
+
+methods_pairs <- ggpairs(scd_combined, columns = c('mead', 'powell', 'demand'), 
+                         aes(color=method, alpha = 0.5))
+
+
+### Compare cLHS to LHSD - pairwise plots
+
+
+
+
+
+### Possibly test imposing correlation AFTER LHS sampling
+# using Iman-Conover transformation
 
 # initial LHS design: 1000 samples. 
 # initial conditions treated as 1D, since we have a CDF for the joint distribution of Mead and Powell
@@ -291,7 +354,11 @@ lhs_design <- lhsDesign(1000, 2, seed = 4)$design
 # optimized LHS design using maximin criteria
 maxmin_lhs <- maximinSA_LHS(lhs_design)
 
+
 # pull initial conditions samples according to optimized LHS design 
 ic_probs <- maxmin_lhs$design[,1]
+
+
+
 
 
