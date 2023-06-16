@@ -160,14 +160,14 @@ p_combo_hist <- ggplot(p_long, aes(x=powell_pe)) +
 dist_over_hist(long$mead_pe) # for Apr 2023 data, best fit is weibull 
 m_dist_type <- 'weibull'
 dist_over_hist(long$powell_pe) # for Apr 2023 data, best fit is lognormal
-p_dist_type <- 'lnorm'
+p_dist_type <- 'norm'
 
 # Mead distribution fitting
 mead_dist <- fitdist(long$mead_pe, distr = m_dist_type, method = "mge", gof = "KS")
 m_params <- list(shape=mead_dist$estimate[1], scale=mead_dist$estimate[2]) # may need to change parameter names depending on distribution
 # Powell distribution fitting
 powell_dist <- fitdist(long$powell_pe, distr = p_dist_type, method = "mge", gof = "KS")
-p_params <- list(meanlog=powell_dist$estimate[1], sdlog=powell_dist$estimate[2]) # may need to change parameter names depending on distribution
+p_params <- list(mean=powell_dist$estimate[1], sd=powell_dist$estimate[2]) # may need to change parameter names depending on distribution
 
 ### Select best fit copula and determine parameters
 
@@ -185,7 +185,7 @@ pobs_mat <- as.matrix(cbind(mead_pobs, powell_pobs))
 
 # You can run Shiny app to explore and compare different copulas - Vinecopula package
 # Can also select copula here, especially if you don't want the top fit determined by BiCopSelect
-# selected_cop <- BiCopCompare(mead_pobs, powell_pobs, familyset = NA, rotations = TRUE)
+selected_cop <- BiCopCompare(mead_pobs, powell_pobs, familyset = NA, rotations = TRUE)
 
 # Select Cop model
 selected_cop <- BiCopSelect(mead_pobs, powell_pobs,familyset=NA)
@@ -244,7 +244,7 @@ for (i in 1:30){
   #print(plot_compare)
   ggsave(filename = paste0('data/temp/unifsamps_', i, '.png'), plot_compare, width=4, height=4)
 }
-# Random seed 4 appears to give more even distribution
+# Random seed 14 appears to give more even distribution
 
 # Determine number of samples and generate initial conditions dataframe
 set.seed(14)
@@ -296,7 +296,7 @@ initial_conditions <- readRDS('data/outputs/init_cond_1000.rds')
 n <-1000
 min_demand <- 4.2
 max_demand <- 6.0 
-set.seed(4)
+set.seed(4) # Random seed 4 appears to give good distribution for demand
 
 demand <-  runif(n = n, min = min_demand, max = max_demand)
 
@@ -313,7 +313,7 @@ scd_lhsd_probs <- get_lhsd_samp(scd_df)
 # Map back onto marginal distributions to get values for each dimension
 # NEED TO MANUALLY CHANGE BELOW CODE TO MATCH DISTRIBUTIONS FITTED TO MARGINS
 mead_samps <- qweibull(scd_lhsd_probs[,1], shape = 41.9, scale = 1074)
-powell_samps <- qlnorm(scd_lhsd_probs[,2], meanlog = 8.19, sdlog = 0.0123)
+powell_samps <- qnorm(scd_lhsd_probs[,2], mean = 3596.1, sd = 44.3)
 demand_samps <- qunif(scd_lhsd_probs[,3], min = 4.2, max = 6.0)
 scd_lhsd <- data.frame('mead' = mead_samps, 'powell' = powell_samps, 
                        'demand' = demand_samps, 'method' = 'LHSD')
@@ -327,23 +327,41 @@ scd_lhsd <- scd_lhsd %>%
 lhsd_pairwise <- ggpairs(as.data.frame(scd_lhsd), columns = c('mead', 'powell', 'demand'))
 
 ### Compare random sampling to LHSD - pairwise plots
-scd_long <- scd_lhsd %>%
-  pivot_longer(cols=everything(), names_to='Uncertainty', values_to='Value') %>%
-  mutate(Method='LHSD')
+scd_combined <- rbind(scd_lhsd, scd_df)
 
-scd_longer <- rbind(scd_df_long, scd_df_long)
-
-scd_combined <- rbind(scd_df, scd_lhsd)
-
-methods_pairs <- ggpairs(scd_combined, columns = c('mead', 'powell', 'demand'), 
+combo_df <- rbind(scd_df, scd_lhsd)
+methods_pairs <- ggpairs(combo_df, columns = c('mead', 'powell', 'demand'), 
                          aes(color=method, alpha = 0.5))
 
 
+### Check final sampling with scatterplot
+plot_compare <- ggplot() +
+  geom_point(data = scd_lhsd, mapping = aes(x=mead, y=powell), color = 'red') +
+  geom_point(data = long, mapping = aes(x=mead_pe, y=powell_pe), color='blue') +
+  xlab('Mead Elevation (ft)') +
+  ylab('Powell Elevation (ft)') +
+  #ylim(3450, 3735) +
+  #xlim(900, 1135) +
+  theme_bw()
+
+plot_compare
+
 ### Compare cLHS to LHSD - pairwise plots
+clhs_scd <- readRDS(scd_df, file = 'data/temp/scd_df.rds')
+clhs_scd <- mutate(clhs_scd, method='cLHS')
 
+lhsd_v_clhs <- rbind(scd_lhsd, clhs_scd)
 
+methods_pairs <- ggpairs(lhsd_v_clhs, columns = c('mead', 'powell', 'demand'), 
+                         aes(color=method, alpha = 0.5))
 
+mindist_cLHS <- mindist(clhs_scd[,1:3])
+mindist_LHSD <- mindist(scd_lhsd[,1:3])
+mindist_Random <- mindist(scd_df[,1:3])
 
+mstmean_cLHS <- mstCriteria(clhs_scd[,1:3])$stats[1]
+mstmean_LHSD <- mstCriteria(scd_lhsd[,1:3])$stats[1]
+mstmean_Random <- mstCriteria(scd_df[,1:3])$stats[1]
 
 ### Possibly test imposing correlation AFTER LHS sampling
 # using Iman-Conover transformation
