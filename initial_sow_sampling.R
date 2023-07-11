@@ -27,8 +27,6 @@ normalize_col <- function(x){
 }
 
 ############## OBTAIN DATA #############################
-#full_factorial_sow <- read.csv('data/ignore/full_factorial_sow.csv', header = F, sep = ',')
-#full_factorial_sow_norm <- read.csv('data/ignore/full_factorial_sow_norm.csv', header = F, sep = ',')
 full_factorial_sow <- readRDS('data/outputs/full_factorial_sow.rds')
 full_factorial_sow_norm <- readRDS('data/outputs/full_factorial_sow_norm.rds')
 
@@ -39,32 +37,6 @@ iter = 10000
 set.seed(26)
 
 sow_list <- list()
-
-### uniform cLHS Method
-
-# Load new implementation of uniform cLHS with C++ version of cLHS package
-source('scripts/uniform_clhs.R')
-environment(uniform_clhs)
-
-ucLHS <- list()
-initial_sow_set_uclhs=my_clhs(full_factorial_sow_norm, size=nsow, iter=iter, 
-                              simple = F, weights = list(numeric=1, factor=1, correlation=0))
-
-saveRDS(initial_sow_set_uclhs, 'data/outputs/initial_sow_set_uclhs_100.rds')
-sow_values_uclhs <- full_factorial_sow[c(initial_sow_set_uclhs$index_samples),]
-sow_values_uclhs <- mutate(sow_values_uclhs, method = 'uclhs')
-sow_norm_uclhs <- full_factorial_sow_norm[c(initial_sow_set_uclhs$index_samples),]
-
-sow_long_uclhs <- pivot_longer(sow_values_uclhs, cols = -method, names_to = 'metric', 
-                               values_to = 'value') 
-
-ucLHS[['method']] <- 'u_cLHS_100'
-ucLHS[['model']] <- initial_sow_set_uclhs$index_samples
-ucLHS[['SOW']] <- select(sow_values_uclhs, -method)
-ucLHS[['SOW_norm']] <- sow_norm_uclhs
-ucLHS[['SOW_long']] <- sow_long_uclhs
-
-sow_list[[1]] <- ucLHS
 
 ### cLHS Method
 cLHS <- list()
@@ -82,58 +54,39 @@ sow_long_clhs <- pivot_longer(sow_values_clhs, cols = -method, names_to = 'metri
 
 cLHS[['method']] <- 'cLHS_100'
 cLHS[['model']] <- initial_sow_set_clhs$index_samples
-cLHS[['SOW']] <- select(sow_values_clhs, -method)
+cLHS[['SOW']] <- dplyr::select(sow_values_clhs, -method)
 cLHS[['SOW_norm']] <- sow_norm_clhs
 cLHS[['SOW_long']] <- sow_long_clhs
 
-sow_list[[2]] <- cLHS
+sow_list[[1]] <- cLHS
 
-# compare to kmeans cluster samples (prospectr naes)
-# Consider a different implementation: MacQueen method for k-means is better at handling rows that are extremely close
-initial_sow_set_kmeans <- naes(full_factorial_sow_norm, k=nsow)
 
-saveRDS(initial_sow_set_kmeans, 'data/outputs/initial_sow_set_kmeans.rds')
-kmeans <- list()
+### uniform cLHS Method
 
-sow_values_kmeans <- full_factorial_sow[c(initial_sow_set_kmeans$model),]
-sow_values_norm_kmeans <- full_factorial_sow_norm[c(initial_sow_set_kmeans$model),]
+# Load new implementation of uniform cLHS with C++ version of cLHS package
+source('scripts/uniform_clhs.R')
+environment(uniform_clhs) <- asNamespace('clhs') # setting environment of your function the same as the original package
+assignInNamespace("clhs.data.frame", uniform_clhs, ns = "clhs") # replacing uniform_clhs with clhs anywhere else clhs occurs in the package clhs. Should not affect my results, but just in case
 
-sow_values_kmeans <- mutate(sow_values_kmeans, method = 'kmeans')
+ucLHS <- list()
+initial_sow_set_uclhs=uniform_clhs(full_factorial_sow_norm, size=nsow, iter=iter, 
+                              simple = F, weights = list(numeric=1, factor=1, correlation=0))
 
-sow_long_kmeans <- pivot_longer(sow_values_kmeans, cols = -method, names_to = 'metric', values_to = 'value') 
+saveRDS(initial_sow_set_uclhs, 'data/outputs/initial_sow_set_uclhs_100.rds')
+sow_values_uclhs <- full_factorial_sow[c(initial_sow_set_uclhs$index_samples),]
+sow_values_uclhs <- mutate(sow_values_uclhs, method = 'uclhs')
+sow_norm_uclhs <- full_factorial_sow_norm[c(initial_sow_set_uclhs$index_samples),]
 
-kmeans[['method']] <- 'kmeans_100'
-kmeans[['model']] <- initial_sow_set_kmeans$model
-kmeans[['SOW']] <- select(sow_values_kmeans, -method)
-kmeans[['SOW_norm']] <- sow_values_norm_kmeans
-kmeans[['SOW_long']] <- sow_long_kmeans
+sow_long_uclhs <- pivot_longer(sow_values_uclhs, cols = -method, names_to = 'metric', 
+                               values_to = 'value') 
 
-sow_list[[3]] <- kmeans
+ucLHS[['method']] <- 'u_cLHS_100'
+ucLHS[['model']] <- initial_sow_set_uclhs$index_samples
+ucLHS[['SOW']] <- select(sow_values_uclhs, -method)
+ucLHS[['SOW_norm']] <- sow_norm_uclhs
+ucLHS[['SOW_long']] <- sow_long_uclhs
 
-### FSCS DOES NOT ACHIEVE LATIN HYPERCUBE, WHICH IS IMPORTANT FOR DESIGN OF EXPERIMENT
-# Compare to FSCS (Feature Space Coverage Sampling)
-# fscs_clusters <- kmeanspp(full_factorial_sow_norm, k=nsow, iter.max = iter)
-# saveRDS(fscs_clusters, 'data/outputs/initial_sow_set_fscs.rds')
-# dists_to_centers <- fields::rdist(x1 = fscs_clusters$centers, x2 = full_factorial_sow_norm)
-# sample_indices <- apply(dists_to_centers, MARGIN = 1, FUN = which.min)
-# 
-# sow_values_fscs <- full_factorial_sow[sample_indices,]
-# sow_values_norm_fscs <- full_factorial_sow_norm[sample_indices,]
-# 
-# sow_values_fscs <- mutate(sow_values_fscs, method = 'FSCS')
-# 
-# sow_long_fscs <- pivot_longer(sow_values_fscs, cols = -method, names_to = 'metric', values_to = 'value')
-# 
-# fscs <- list()
-# 
-# fscs[['method']] <- 'FSCS'
-# fscs[['model']] <- sample_indices
-# fscs[['SOW']] <- select(sow_values_fscs, -method)
-# fscs[['SOW_norm']] <- sow_values_norm_fscs
-# fscs[['SOW_long']] <- sow_long_fscs
-# 
-# sow_list[[4]] <- fscs
-
+sow_list[[2]] <- ucLHS
 
 # Combine sets into single long and wide data frames for plotting
 long_sow_df <- bind_rows(sow_long_clhs, sow_long_uclhs)
@@ -141,31 +94,6 @@ wide_sow_df <- bind_rows(sow_values_clhs, sow_values_uclhs)
 
 # Pairwise plots for the dimensions for each set
 set_compare_plot <- ggpairs(wide_sow_df, columns = 1:9, ggplot2::aes(color = method, alpha = 0.5))
-
-### Calculate diversity metrics for each sampling method based on sow_list: 
-# metrics: avg of: euclidean dist, cosine & jaccard similarity...
-
-dist_methods <- c('euclidean', 'cosine', 'jaccard')
-
-# calculate diversity metrics based on each distance/similarity matrix
-div_df <- data.frame(dist_methods)
-
-# Creates a distance/similarity matrix for each sampling method and distance method
-# For a diversity metric, takes the average of each distance/similarity matrix
-for (i in 1:length(sow_list)){
-  temp_metrics <- c()
-  sow_norm <- sow_list[[i]]$SOW_norm
-  for (j in 1:length(dist_methods)){
-    dist_mat <- NA
-    method = dist_methods[j]
-    dist_mat <- dist(sow_norm, method = method)
-    avg_dist <- mean(dist_mat)
-    temp_metrics[j] <- avg_dist
-  }
-  div_df[sow_list[[i]]$method] <- temp_metrics
-}
-
-saveRDS(div_df, file='data/outputs/diversity_metrics_500sow')
 
 # find number of unique sets of streamflow metrics for each approach (500 SOW sets)
 unique_traces <- c()
@@ -177,5 +105,3 @@ for (i in 1:length(sow_list)){
     nrow()
 }
 
-
-# Selected method: uniform cLHS (esp. w/ more unique streamflow metric combos)
