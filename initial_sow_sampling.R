@@ -12,13 +12,14 @@ library(GGally)
 library(lsa)
 library(proxy)
 library(prospectr)
+library(motifcluster)
 
 ############## FUNCTIONS #################
 
 # load Nathan's modified version of cLHS to for uniform cLHS implementations
-source("scripts/modified clhs.R")
-environment(my_clhs) <- asNamespace('clhs') # setting environment of your function the same as the original package
-assignInNamespace("clhs", my_clhs, ns = "clhs") # replacing my_clhs with clhs anywhere else clhs occurs in the package clhs. Should not affect my results, but just in case
+#source("scripts/modified clhs.R")
+#environment(my_clhs) <- asNamespace('clhs') # setting environment of your function the same as the original package
+#assignInNamespace("clhs", my_clhs, ns = "clhs") # replacing my_clhs with clhs anywhere else clhs occurs in the package clhs. Should not affect my results, but just in case
 
 # function to normalize a single column (or vector) so that values are between 0 and 1
 normalize_col <- function(x){
@@ -26,22 +27,25 @@ normalize_col <- function(x){
 }
 
 ############## OBTAIN DATA #############################
-full_factorial_sow <- read.csv('data/ignore/full_factorial_sow.csv', header = F, sep = ',')
-full_factorial_sow_norm <- read.csv('data/ignore/full_factorial_sow_norm.csv', header = F, sep = ',')
-
+#full_factorial_sow <- read.csv('data/ignore/full_factorial_sow.csv', header = F, sep = ',')
+#full_factorial_sow_norm <- read.csv('data/ignore/full_factorial_sow_norm.csv', header = F, sep = ',')
+full_factorial_sow <- readRDS('data/outputs/full_factorial_sow.rds')
+full_factorial_sow_norm <- readRDS('data/outputs/full_factorial_sow_norm.rds')
 
 ################## Test Sampling Algorithms #####################
-nsow = 100
+nsow = 500
 
 iter = 10000
 set.seed(26)
 
 sow_list <- list()
 
-# k-DPP sampling to get diverse set that covers uncertainty space
-# use python implementation: 
-
 ### uniform cLHS Method
+
+# Load new implementation of uniform cLHS with C++ version of cLHS package
+source('scripts/uniform_clhs.R')
+environment(uniform_clhs)
+
 ucLHS <- list()
 initial_sow_set_uclhs=my_clhs(full_factorial_sow_norm, size=nsow, iter=iter, 
                               simple = F, weights = list(numeric=1, factor=1, correlation=0))
@@ -60,7 +64,7 @@ ucLHS[['SOW']] <- select(sow_values_uclhs, -method)
 ucLHS[['SOW_norm']] <- sow_norm_uclhs
 ucLHS[['SOW_long']] <- sow_long_uclhs
 
-sow_list[[4]] <- ucLHS
+sow_list[[1]] <- ucLHS
 
 ### cLHS Method
 cLHS <- list()
@@ -82,10 +86,7 @@ cLHS[['SOW']] <- select(sow_values_clhs, -method)
 cLHS[['SOW_norm']] <- sow_norm_clhs
 cLHS[['SOW_long']] <- sow_long_clhs
 
-sow_list[[5]] <- cLHS
-
-# compare to kennard stone: matrix too big!
-# initial_sow_set_kenstone <- kenStone(full_factorial_sow_norm, k=nsow, metric = 'mahal')
+sow_list[[2]] <- cLHS
 
 # compare to kmeans cluster samples (prospectr naes)
 # Consider a different implementation: MacQueen method for k-means is better at handling rows that are extremely close
@@ -107,7 +108,32 @@ kmeans[['SOW']] <- select(sow_values_kmeans, -method)
 kmeans[['SOW_norm']] <- sow_values_norm_kmeans
 kmeans[['SOW_long']] <- sow_long_kmeans
 
-sow_list[[6]] <- kmeans
+sow_list[[3]] <- kmeans
+
+### FSCS DOES NOT ACHIEVE LATIN HYPERCUBE, WHICH IS IMPORTANT FOR DESIGN OF EXPERIMENT
+# Compare to FSCS (Feature Space Coverage Sampling)
+# fscs_clusters <- kmeanspp(full_factorial_sow_norm, k=nsow, iter.max = iter)
+# saveRDS(fscs_clusters, 'data/outputs/initial_sow_set_fscs.rds')
+# dists_to_centers <- fields::rdist(x1 = fscs_clusters$centers, x2 = full_factorial_sow_norm)
+# sample_indices <- apply(dists_to_centers, MARGIN = 1, FUN = which.min)
+# 
+# sow_values_fscs <- full_factorial_sow[sample_indices,]
+# sow_values_norm_fscs <- full_factorial_sow_norm[sample_indices,]
+# 
+# sow_values_fscs <- mutate(sow_values_fscs, method = 'FSCS')
+# 
+# sow_long_fscs <- pivot_longer(sow_values_fscs, cols = -method, names_to = 'metric', values_to = 'value')
+# 
+# fscs <- list()
+# 
+# fscs[['method']] <- 'FSCS'
+# fscs[['model']] <- sample_indices
+# fscs[['SOW']] <- select(sow_values_fscs, -method)
+# fscs[['SOW_norm']] <- sow_values_norm_fscs
+# fscs[['SOW_long']] <- sow_long_fscs
+# 
+# sow_list[[4]] <- fscs
+
 
 # Combine sets into single long and wide data frames for plotting
 long_sow_df <- bind_rows(sow_long_clhs, sow_long_uclhs)
@@ -139,7 +165,7 @@ for (i in 1:length(sow_list)){
   div_df[sow_list[[i]]$method] <- temp_metrics
 }
 
-saveRDS(div_df, file='data/outputs/diversity_metrics_100sow')
+saveRDS(div_df, file='data/outputs/diversity_metrics_500sow')
 
 # find number of unique sets of streamflow metrics for each approach (500 SOW sets)
 unique_traces <- c()

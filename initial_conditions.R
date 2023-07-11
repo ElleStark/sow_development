@@ -80,7 +80,7 @@ long <- m_long %>%
 
 # This plot compares alternatives (and uses default boxplot settings)
 compare_boxplot <- ggplot(data = long) +
-  geom_boxplot(mapping = aes(y=powell_pe, fill = Alternative)) +
+  geom_boxplot(mapping = aes(y=mead_pe, fill = Alternative)) +
   theme_bw() +
   ylab('Mead Pool Elevation') +
   ggtitle('EOCY 2026 Elevations') +
@@ -193,7 +193,7 @@ pobs_mat <- as.matrix(cbind(mead_pobs, powell_pobs))
 
 # You can run Shiny app to explore and compare different copulas - Vinecopula package
 # Can also select copula here, especially if you don't want the top fit determined by BiCopSelect
-#selected_cop <- BiCopCompare(mead_pobs, powell_pobs, familyset = NA, rotations = TRUE)
+# BiCopCompare(mead_pobs, powell_pobs, familyset = NA, rotations = TRUE)
 
 # Select Cop model
 selected_cop <- BiCopSelect(mead_pobs, powell_pobs,familyset=NA)
@@ -232,12 +232,20 @@ scatterplot3d(v[,1],v[,2], cdf_mvd, color="red", main="CDF", xlab = "Mead (ft)",
 # contour(joint_dist, pMvdc, xlim = c(m_low, m_high), ylim=c(p_low, p_high), main = "Contour plot")
 
 # Determine number of samples and generate initial conditions dataframe
-set.seed(30) # Seed 30 selected because yielded highest MSTmean testing1 to 100
+set.seed(51) # Seed 30 selected because yielded highest MSTmean testing1 to 100
 initial_conditions <- as.data.frame(rMvdc(1000, joint_dist)) %>%
   rename('mead' = 'V1', 'powell' = 'V2')
 
 # Distribution may generate pool elevations above full pool or below dead pool. 
 # Check for those cases and set reservoir to max/min in those instances. 
+
+### For high Powell values, manually adjust to better fit distribution if desired
+# high_powell <- filter(initial_conditions, powell>3675)
+# powell_replace <- runif(nrow(high_powell), 3655, 3700)
+# mead_replace <- runif(nrow(high_powell), 1100, 1175)
+# initial_conditions$mead[initial_conditions$powell>3675] <- mead_replace
+# initial_conditions$powell[initial_conditions$powell>3675] <- powell_replace
+
 
 initial_conditions <- initial_conditions %>% 
   mutate(across(powell, ~ ifelse(. > 3700, 3700, .))) %>%
@@ -330,6 +338,9 @@ plot_compare <- ggplot() +
   theme_bw()
 
 plot_compare
+
+# Save SCD dataframe
+saveRDS(scd_lhsd, file = 'data/outputs/scd_df.rds')
 
 ### Compare cLHS to LHSD - pairwise plots
 full_factorial_scd <- uncount(initial_conditions, length(demand))
