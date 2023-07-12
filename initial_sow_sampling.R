@@ -34,7 +34,7 @@ full_factorial_sow_norm <- readRDS('data/outputs/full_factorial_sow_norm.rds')
 nsow = 500
 
 iter = 10000
-set.seed(26)
+set.seed(21)
 
 sow_list <- list()
 
@@ -106,7 +106,7 @@ for (i in 1:length(sow_list)){
 }
 
 
-# Test random seeds for ucLHS. evaluate using # of unique flows, mindist, and mstmean
+### Test random seeds for ucLHS. evaluate using # of unique flows, mindist, and mstmean
 unique_flows <- c()
 mindist_list <- c()
 mstmean_list <- c()
@@ -143,4 +143,13 @@ for (i in 1:30){
   dev.off()
   
 }
+
+metrics_df <- data.frame('Unique Flows'=unique_flows, 'MinDist'=mindist_list, 'MSTMean'=mstmean_list)
+saveRDS(metrics_df, 'data/outputs/uclhs_randseed_metrics.rds')
+
+# Analyze metrics to select random seed
+# top 10 seeds for each metric: 
+mindist_top10 <- order(metrics_df$MinDist, decreasing = TRUE)[1:10]
+mstmean_top10 <- order(metrics_df$MSTMean, decreasing = TRUE)[1:10]
+unique_flows_top10 <- order(metrics_df$Unique.Flows, decreasing = TRUE)[1:10]
 

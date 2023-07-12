@@ -107,7 +107,7 @@ uniform_clhs <- function(
       data_continuous, 
       2, 
       function(x) {
-        seq(min(x, na.rm=T), max(x, na.rm = T), length.out = size + 1, na.rm = TRUE)
+        seq(min(x, na.rm = T), max(x, na.rm = T), length.out = size + 1)
       }
     )
     
