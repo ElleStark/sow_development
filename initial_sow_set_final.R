@@ -3,11 +3,8 @@
 # Elle Stark July 2023
 
 library(tidyverse)
-library(ggplot2)
 library(clhs)
-library(DiceDesign)
 library(GGally)
-library(motifcluster)
 
 ############## FUNCTIONS #################
 
@@ -28,19 +25,19 @@ nsow = 500
 iter = 10000
 set.seed(16) # see script 'initial_sow_sampling.R' for random seed selection
 
-#  uniform cLHS Method
-ucLHS <- list()
-initial_sow_set_uclhs=uniform_clhs(full_factorial_sow_norm, size=nsow, iter=iter, 
-                              simple = F, weights = list(numeric=1, factor=1, correlation=0))
+#  uniform cLHS Method - exclude Scenario and TraceNumber from calculations
+initial_sow_set_uclhs=uniform_clhs(full_factorial_sow_norm[, !names(full_factorial_sow_norm) %in% c('Scenario', 'TraceNumber')], 
+                                   size=nsow, iter=iter, simple = F, 
+                                   weights = list(numeric=1, factor=1, correlation=0))
 
 saveRDS(initial_sow_set_uclhs, 'data/outputs/initial_sow_sample_uclhs_500.rds')
 sow_values_uclhs <- full_factorial_sow[c(initial_sow_set_uclhs$index_samples),]
-saveRDS(initial_sow_set_uclhs, 'data/outputs/initial_sow_set_uclhs_500.rds')
+saveRDS(sow_values_uclhs, 'data/outputs/initial_sow_set_uclhs_500.rds')
 sow_norm_uclhs <- full_factorial_sow_norm[c(initial_sow_set_uclhs$index_samples),]
-saveRDS(initial_sow_set_uclhs, 'data/outputs/initial_sow_set_norm_uclhs_500.rds')
+saveRDS(sow_norm_uclhs, 'data/outputs/initial_sow_set_norm_uclhs_500.rds')
 
 # Pairwise plots for the uncertainty metrics
-sow_pairs_plot <- ggpairs(sow_values_uclhs, columns = 1:9, ggplot2::aes(color = 'UcLHS', alpha = 0.5))
+sow_pairs_plot <- ggpairs(sow_values_uclhs[, !names(sow_values_uclhs) %in% c('Scenario', 'TraceNumber')], columns = 1:9, ggplot2::aes(color = 'UcLHS', alpha = 0.5))
 
 
 

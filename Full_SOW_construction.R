@@ -5,15 +5,6 @@
 
 library(tidyverse)
 library(ggplot2)
-library(clhs)
-library(combinat)
-library(TSclust)
-library(corrplot)
-library(DiceDesign)
-library(GGally)
-library(lsa)
-library(proxy)
-library(prospectr)
 
 ############## FUNCTIONS #################
 
@@ -49,7 +40,7 @@ flow_stats <- flow_stats %>%
   mutate(iqr=iqr_df$iqr) 
 
 # Select desired flow metrics: see Determine_flow_metrics.R
-selected_stats <- c('median', 'min', 'max', 'iqr', 'Driest10yrAVG', 'Wettest10yrAVG')
+selected_stats <- c('median', 'min', 'max', 'iqr', 'Driest10yrAVG', 'Wettest10yrAVG', 'Scenario', 'TraceNumber')
 
 flow_stats <- flow_stats %>%
   dplyr::select(all_of(selected_stats))
@@ -61,6 +52,8 @@ flow_stats <- flow_stats %>%
   # For each SCD row [combined demand value & initial condition pair], repeat hydrology stats dataframe
   # Closely follows procedure from 2020 Robustness Runs
   # Results in ~2 million SOW in full-factorial
+
+n = nrow(scd_df)
 
 # Plot SCD df
 scd_plot <- ggplot(scd_df, mapping = aes(x=mead, y=demand)) +
@@ -77,7 +70,7 @@ full_factorial_sow <- full_factorial_sow %>%
          powell_pe = rep(scd_df$powell, nrow(flow_stats)))
 
 full_factorial_sow_norm <- full_factorial_sow %>%
-  mutate(across(everything(), normalize_col))
+  mutate(across(-c('Scenario', 'TraceNumber'), normalize_col))
 
 # write RDS files for use in other R scripts
 saveRDS(full_factorial_sow, file = 'data/outputs/full_factorial_sow.rds')
