@@ -72,7 +72,7 @@ ucLHS <- list()
 initial_sow_set_uclhs=uniform_clhs(full_factorial_sow_norm, size=nsow, iter=iter, 
                               simple = F, weights = list(numeric=1, factor=1, correlation=0))
 
-saveRDS(initial_sow_set_uclhs, 'data/outputs/initial_sow_set_uclhs_100.rds')
+saveRDS(initial_sow_set_uclhs, 'data/outputs/initial_sow_set_uclhs_500.rds')
 sow_values_uclhs <- full_factorial_sow[c(initial_sow_set_uclhs$index_samples),]
 sow_values_uclhs <- mutate(sow_values_uclhs, method = 'uclhs')
 sow_norm_uclhs <- full_factorial_sow_norm[c(initial_sow_set_uclhs$index_samples),]
@@ -80,7 +80,7 @@ sow_norm_uclhs <- full_factorial_sow_norm[c(initial_sow_set_uclhs$index_samples)
 sow_long_uclhs <- pivot_longer(sow_values_uclhs, cols = -method, names_to = 'metric', 
                                values_to = 'value') 
 
-ucLHS[['method']] <- 'u_cLHS_100'
+ucLHS[['method']] <- 'u_cLHS_500'
 ucLHS[['model']] <- initial_sow_set_uclhs$index_samples
 ucLHS[['SOW']] <- select(sow_values_uclhs, -method)
 ucLHS[['SOW_norm']] <- sow_norm_uclhs
@@ -103,5 +103,44 @@ for (i in 1:length(sow_list)){
     group_by_all() %>%
     unique() %>%
     nrow()
+}
+
+
+# Test random seeds for ucLHS. evaluate using # of unique flows, mindist, and mstmean
+unique_flows <- c()
+mindist_list <- c()
+mstmean_list <- c()
+
+for (i in 1:30){
+  # set different random seed for each iteration
+  set.seed(i)
+  
+  # get uniform cLHS sample
+  sow_set_uclhs=uniform_clhs(full_factorial_sow_norm, size=nsow, iter=iter, 
+                                     simple = F, weights = list(numeric=1, factor=1, correlation=0))
+  sow_norm_uclhs <- full_factorial_sow_norm[c(sow_set_uclhs$index_samples),]
+  sow_values_uclhs <- full_factorial_sow[c(sow_set_uclhs$index_samples),]
+  
+  # append number of unique traces to list
+  unique_flows[i] <- sow_values_uclhs %>%
+    dplyr::select(median, min, max, iqr, Driest10yrAVG, Wettest10yrAVG) %>%
+    group_by_all() %>%
+    unique() %>%
+    nrow()
+
+  
+  # append mindist to list
+  mindist_list[i] <- mindist(sow_norm_uclhs)
+    
+  # append mstmean to list
+  mstmean_list[i] <- mstCriteria(sow_norm_uclhs)$stats[1]
+    
+  # save pairwise scatterplot of samples for visualization
+  filename <- paste0('data/temp/uclhs_seeds/uclhs_seed_', i, '.pdf')
+  pdf(filename, height = 7, width = 14)
+  uclhs_scatter <- ggpairs(sow_values_uclhs, ggplot2::aes(color = 'UcLHS', alpha = 0.5))
+  print(uclhs_scatter)
+  dev.off()
+  
 }
 
